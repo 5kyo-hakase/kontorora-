@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>パンチコントローラー</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { text-align: center; font-family: sans-serif; background: #222; color: white; padding-top: 50px; }
+        button { font-size: 24px; padding: 20px 40px; margin: 20px; border-radius: 10px; border: none; background: #ff4757; color: white; }
+        #status { font-size: 18px; color: #ffa500; }
+    </style>
+</head>
+<body>
+    <h1>パンチコントローラー</h1>
+    <p>スマホをしっかり握って振ってください！</p>
+    <button id="startBtn">1. センサーを許可して接続</button>
+    <div id="status">未接続</div>
+
+    <script>
+        const roomName = 'my_punch_game_123'; // ※PC側と同じ合言葉にする
+        let client = null;
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            // サーバー接続
+            client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
+            client.on('connect', () => {
+                document.getElementById('status').innerText = '接続完了！振ってください！';
+            });
+
+            // センサー許可（iOS用判定含む）
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(state => {
+                    if (state === 'granted') startSensor();
+                });
+            } else {
+                startSensor();
+            }
+        });
+
+        function startSensor() {
+            window.addEventListener('devicemotion', (event) => {
+                let acc = event.accelerationIncludingGravity;
+                if (!acc) return;
+                let total = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+                
+                // 激しく振られたらPCへ送信
+                if (total > 28) { // 判定の固さはここで調整
+                    if (client && client.connected) {
+                        client.publish(roomName, 'PUNCH');
+                        document.body.style.background = '#ff4757'; // 振った瞬間背景を赤く
+                        setTimeout(() => { document.body.style.background = '#222'; }, 200);
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
